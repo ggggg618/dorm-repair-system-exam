@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 报修单核心服务接口
@@ -24,6 +25,9 @@ public interface RepairOrderService extends IService<RepairOrder> {
     
     // 根据维修人员ID查询订单（维修人员专属，支持状态筛选）
     List<RepairOrder> getByRepairmanId(Long repairmanId, String status);
+
+    // 按设备类型统计报修次数（管理员专属，全部工单不按状态过滤）
+    List<Map<String, Object>> countByDeviceType();
     
     // 分页查询订单（包含用户信息，管理员专属）
     IPage<OrderWithUserDTO> getPageWithUserInfo(Page<RepairOrder> page, String status);

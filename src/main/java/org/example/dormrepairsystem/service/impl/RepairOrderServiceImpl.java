@@ -20,7 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 报修单核心服务实现类
@@ -83,9 +87,30 @@ public class RepairOrderServiceImpl extends ServiceImpl<RepairOrderMapper, Repai
     @Override
     public List<RepairOrder> getByRepairmanId(Long repairmanId, String status) {
         LambdaQueryWrapper<RepairOrder> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(RepairOrder::getRepairmanId, repairmanId);
         applyStatusFilter(wrapper, status);
         wrapper.orderByDesc(RepairOrder::getUpdateTime); // 按最后修改时间倒序
         return this.list(wrapper);
+    }
+
+    // 按设备类型统计报修次数（全部工单，含已取消）
+    @Override
+    public List<Map<String, Object>> countByDeviceType() {
+        List<RepairOrder> orders = this.list();
+        Map<String, Long> counts = orders.stream()
+                .collect(Collectors.groupingBy(
+                        order -> order.getDeviceType() == null ? "" : order.getDeviceType(),
+                        Collectors.counting()));
+
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
+                .map(entry -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("deviceType", entry.getKey());
+                    item.put("count", entry.getValue());
+                    return item;
+                })
+                .collect(Collectors.toList());
     }
 
     // 分页查询订单（包含用户信息，管理员专属）

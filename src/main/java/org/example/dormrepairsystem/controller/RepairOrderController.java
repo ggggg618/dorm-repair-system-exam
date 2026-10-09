@@ -22,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ import java.util.Set;
 public class RepairOrderController {
 
     /** 合法订单状态 */
-    private static final Set<String> VALID_STATUSES = Set.of("待处理", "维修中", "已完成", "已取消");
+    private static final Set<String> VALID_STATUSES = Set.of("待处理", "维修中", "待确认", "已完成", "已取消");
 
     /** 每个订单最多上传的图片数量 */
     private static final int MAX_IMAGES_PER_ORDER = 3;
@@ -183,6 +184,22 @@ public class RepairOrderController {
     }
 
     /**
+     * 按设备类型统计报修次数
+     *
+     * 仅管理员可访问（权限由拦截器保证），统计全部工单（含已取消）。
+     */
+    @GetMapping("/stats/device-type")
+    @Operation(summary = "按设备类型统计", description = "统计各类设备的报修次数，仅管理员可访问")
+    public ResponseEntity<Map<String, Object>> statsDeviceType() {
+        Map<String, Object> result = new HashMap<>();
+        log.info("按设备类型统计报修次数");
+        List<Map<String, Object>> data = repairOrderService.countByDeviceType();
+        result.put("success", true);
+        result.put("data", data == null ? new ArrayList<>() : data);
+        return new ResponseEntity<>(result, HttpStatus.OK);
+    }
+
+    /**
      * 修改报修状态
      *
      * 学生只能取消自己的订单或在自己订单维修完成后确认完成；维修人员只能推进自己接取的订单；管理员不受限制。
@@ -221,8 +238,8 @@ public class RepairOrderController {
                     return badRequest(result, "当前状态不允许取消");
                 }
             } else if ("已完成".equals(newStatus)) {
-                if (!"维修中".equals(order.getOrderStatus())) {
-                    return badRequest(result, "只有维修中的订单可以确认完成");
+                if (!"待确认".equals(order.getOrderStatus())) {
+                    return badRequest(result, "只有待确认的订单可以确认完成");
                 }
             } else {
                 return forbidden(result, "学生只能取消订单或确认完成");
@@ -231,8 +248,12 @@ public class RepairOrderController {
             if (!Objects.equals(currentUserId, order.getRepairmanId())) {
                 return forbidden(result, "只能操作自己接取的报修单");
             }
-            if (!"维修中".equals(newStatus) && !"已完成".equals(newStatus)) {
-                return forbidden(result, "维修人员只能把订单置为维修中或已完成");
+            if ("待确认".equals(newStatus)) {
+                if (!"维修中".equals(order.getOrderStatus())) {
+                    return badRequest(result, "只有维修中的订单可以提交完工");
+                }
+            } else if (!"维修中".equals(newStatus)) {
+                return forbidden(result, "维修人员只能把订单置为维修中或待确认");
             }
         }
 
@@ -454,7 +475,8 @@ public class RepairOrderController {
         }
 
         try {
-            // 从数据库删除记录
+            // 先删除本地文件，再删除数据库记录，避免留下孤儿文件
+            fileStorage.deleteImage(orderImage.getImageUrl());
             boolean success = orderImageService.removeById(imageId);
             if (success) {
                 log.info("删除成功：图片ID={}, 图片URL={}", imageId, orderImage.getImageUrl());
