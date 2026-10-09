@@ -195,6 +195,7 @@ public class RepairOrderController {
         log.info("按设备类型统计报修次数");
         List<Map<String, Object>> data = repairOrderService.countByDeviceType();
         result.put("success", true);
+        result.put("message", "查询成功");
         result.put("data", data == null ? new ArrayList<>() : data);
         return new ResponseEntity<>(result, HttpStatus.OK);
     }
